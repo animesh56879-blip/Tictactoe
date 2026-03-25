@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe Online</title>
+
+<!-- ✅ FIXED SUPABASE SCRIPT -->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+<style>
+body{margin:0;font-family:sans-serif;background:#111;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;}
+h1{color:#1db954;margin-bottom:20px;}
+.screen{display:none;flex-direction:column;align-items:center;}
+.screen.active{display:flex;}
+button{padding:10px 20px;margin:5px;border:none;border-radius:8px;cursor:pointer;}
+#board{display:grid;grid-template-columns:repeat(3,100px);gap:5px;margin:20px;}
+.cell{width:100px;height:100px;background:#222;display:flex;align-items:center;justify-content:center;font-size:40px;border-radius:10px;cursor:pointer;}
+#status{margin-top:10px;font-size:18px;}
+input{padding:10px;border-radius:5px;border:none;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="screen active" id="loginScreen">
+  <h1>Tic Tac Toe</h1>
+  <input id="name" placeholder="Enter name">
+  <button id="playBtn">Play</button>
+</div>
+
+<!-- MENU -->
+<div class="screen" id="menu">
+  <h1 id="player"></h1>
+  <button id="onlineBtn">Online Multiplayer</button>
+</div>
+
+<!-- GAME -->
+<div class="screen" id="game">
+  <h1 id="status">Loading...</h1>
+  <div id="board"></div>
+</div>
+
+<script>
+window.onload = () => {
+
+// 🔥 SUPABASE INIT (SAFE NOW)
+const supabase = window.supabase.createClient(
+  "https://hepndimfdfrnctylrtsk.supabase.co",
+  "sb_publishable_EwrER6U2qnQyBE4soL_B7w_8VvepxCh"
+);
+
+let playerSymbol="";
+let roomId="";
+let channel=null;
+let board=["","","","","","","","",""];
+let turn="X";
+let gameover=false;
+
+// SCREEN SWITCH
+function show(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+// LOGIN BUTTON FIX
+document.getElementById("playBtn").onclick = () => {
+  let n=document.getElementById("name").value || "Guest";
+  document.getElementById("player").innerText="Welcome "+n;
+  show("menu");
+};
+
+// ONLINE BUTTON
+document.getElementById("onlineBtn").onclick = async () => {
+  roomId = prompt("Enter Room ID:");
+  if(!roomId) return;
+
+  let {data} = await supabase.from("rooms").select("*").eq("id",roomId).single();
+
+  if(!data){
+    playerSymbol="X";
+
+    await supabase.from("rooms").insert({
+      id:roomId,
+      board:["","","","","","","","",""],
+      turn:"X",
+      gameover:false,
+      players:1
+    });
+
+    document.getElementById("status").innerText="Waiting for player...";
+  } else {
+    playerSymbol="O";
+
+    await supabase.from("rooms").update({
+      players:2
+    }).eq("id",roomId);
+
+    document.getElementById("status").innerText="Game starting...";
+  }
+
+  listen();
+  draw();
+  show("game");
+};
+
+// REALTIME LISTENER
+function listen(){
+  channel = supabase.channel("room-"+roomId);
+
+  channel.on("postgres_changes", {
+    event:"*",
+    schema:"public",
+    table:"rooms",
+    filter:"id=eq."+roomId
+  }, payload=>{
+    let d=payload.new;
+    if(!d) return;
+
+    board=d.board;
+    turn=d.turn;
+    gameover=d.gameover;
+
+    if(d.players < 2){
+      document.getElementById("status").innerText="Waiting for player...";
+      return;
+    }
+
+    document.getElementById("status").innerText="Turn: "+turn;
+    draw();
+  }).subscribe();
+}
+
+// DRAW BOARD
+function draw(){
+  let b=document.getElementById("board");
+  b.innerHTML="";
+
+  board.forEach((v,i)=>{
+    let c=document.createElement("div");
+    c.className="cell";
+    c.innerText=v;
+    c.onclick=()=>move(i);
+    b.appendChild(c);
+  });
+}
+
+// MOVE
+async function move(i){
+  if(gameover || turn!==playerSymbol || board[i]!="") return;
+
+  let newBoard=[...board];
+  newBoard[i]=playerSymbol;
+
+  let win=check(newBoard,playerSymbol);
+
+  await supabase.from("rooms").update({
+    board:newBoard,
+    turn: win ? playerSymbol : (playerSymbol==="X"?"O":"X"),
+    gameover: win || newBoard.every(x=>x!="")
+  }).eq("id",roomId);
+
+  if(win) alert("You Win 🎉");
+}
+
+// WIN CHECK
+function check(b,p){
+  let w=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  return w.some(c=>c.every(i=>b[i]===p));
+}
+
+};
+</script>
+
+</body>
+</html>
