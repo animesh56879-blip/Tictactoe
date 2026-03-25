@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe Pro</title>
+<style>
+body{margin:0;font-family:sans-serif;background:#111;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;}
+h1{color:#1db954;text-shadow:0 0 20px #1db954;margin-bottom:20px;}
+.screen{display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;}
+.screen.active{display:flex;}
+button{padding:10px 20px;margin:5px;border:none;border-radius:8px;cursor:pointer;font-size:16px;transition:0.2s;}
+button:hover{filter:brightness(1.2);}
+#board{display:grid;grid-template-columns:repeat(3,100px);grid-gap:5px;margin:20px;}
+.cell{width:100px;height:100px;background:#222;display:flex;align-items:center;justify-content:center;font-size:48px;border-radius:10px;cursor:pointer;transition:0.2s;}
+.cell:hover{background:#1db954;}
+#status{margin-top:10px;font-size:18px;}
+.scoreboard{margin-top:10px;}
+#friendsList{margin-top:10px;}
+.glow{animation:glow 0.5s infinite alternate;}
+@keyframes glow{0%{text-shadow:0 0 5px #1db954;}100%{text-shadow:0 0 20px #1db954;}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div class="screen active" id="loginScreen">
+  <h1>Tic Tac Toe Pro</h1>
+  <input type="text" id="playerName" placeholder="Enter your name" style="padding:10px;font-size:16px;border-radius:5px;border:none;margin-bottom:10px;">
+  <button onclick="login()">Play</button>
+</div>
+
+<!-- MODE SELECTION -->
+<div class="screen" id="modeScreen">
+  <h1>Welcome, <span id="playerDisplay"></span></h1>
+  <button onclick="startOffline2p()">Offline 2-Player</button>
+  <button onclick="showBotMode()">Play vs Bot</button>
+  <button onclick="showOnlineMode()">Online (Coming Soon)</button>
+  <button onclick="logout()">Logout</button>
+</div>
+
+<!-- BOT DIFFICULTY -->
+<div class="screen" id="botScreen">
+  <h1>Select Bot Difficulty</h1>
+  <button onclick="startOfflineBot('easy')">Easy</button>
+  <button onclick="startOfflineBot('medium')">Medium</button>
+  <button onclick="startOfflineBot('hard')">Hard</button>
+  <button onclick="showScreen('modeScreen')">Back</button>
+</div>
+
+<!-- GAME SCREEN -->
+<div class="screen" id="gameScreen">
+  <h1 id="gameModeTitle"></h1>
+  <div id="board"></div>
+  <div id="status">Player X's turn</div>
+  <div class="scoreboard">
+    X Wins: <span id="xWins">0</span> | O Wins: <span id="oWins">0</span> | Draws: <span id="draws">0</span>
+  </div>
+  <button onclick="showScreen('modeScreen')">Return Home</button>
+</div>
+
+<script>
+let screens = document.querySelectorAll('.screen');
+function showScreen(id){screens.forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+
+/* -------- LOGIN -------- */
+let playerName="";
+function login(){
+  let input=document.getElementById('playerName').value.trim();
+  if(input===""){input="Guest";}
+  playerName=input;
+  document.getElementById('playerDisplay').innerText=playerName;
+  showScreen('modeScreen');
+}
+function logout(){playerName="";document.getElementById('playerName').value="";showScreen('loginScreen');}
+
+/* -------- MODE SELECTION -------- */
+function startOffline2p(){startGame('offline2p');}
+function showBotMode(){showScreen('botScreen');}
+function startOfflineBot(difficulty){startGame('bot',difficulty);}
+function showOnlineMode(){alert("Online mode placeholder (requires Firebase setup)");}
+
+/* -------- GAME LOGIC -------- */
+let boardState=[],currentPlayer="X",gameOver=false,xWins=0,oWins=0,draws=0,botDifficulty=null;
+let boardDiv=document.getElementById('board');
+function startGame(mode,difficulty=null){
+  showScreen('gameScreen');
+  gameModeTitle.innerText=(mode==='offline2p')?"Offline 2-Player":`Playing vs Bot (${difficulty})`;
+  botDifficulty=difficulty;
+  boardState=["","","","","","","","",""];
+  currentPlayer="X";
+  gameOver=false;
+  updateStatus();
+  drawBoard(mode);
+}
+
+/* DRAW BOARD */
+function drawBoard(mode){
+  boardDiv.innerHTML="";
+  for(let i=0;i<9;i++){
+    let cell=document.createElement('div');
+    cell.classList.add('cell');
+    cell.dataset.index=i;
+    cell.addEventListener('click',()=>cellClick(i,mode));
+    cell.innerText=boardState[i];
+    boardDiv.appendChild(cell);
+  }
+}
+
+/* HANDLE CELL CLICK */
+function cellClick(idx,mode){
+  if(boardState[idx]!=""||gameOver) return;
+  boardState[idx]=currentPlayer;
+  drawBoard(mode);
+  if(checkWin()){
+    document.getElementById('status').innerText=`Player ${currentPlayer} Wins! 🎉`;
+    gameOver=true;
+    updateScore(currentPlayer);
+    highlightWin(currentPlayer);
+    return;
+  }
+  if(boardState.every(c=>c!=="")){
+    document.getElementById('status').innerText="It's a Draw! 🤝";
+    gameOver=true;
+    draws++; document.getElementById('draws').innerText=draws;
+    return;
+  }
+  currentPlayer=currentPlayer==="X"?"O":"X";
+  updateStatus();
+  if(mode==='bot' && !gameOver && currentPlayer==="O"){setTimeout(()=>botMove(),300);}
+}
+
+/* UPDATE STATUS */
+function updateStatus(){document.getElementById('status').innerText=`Player ${currentPlayer}'s turn`;}
+function updateScore(player){if(player==="X"){xWins++;document.getElementById('xWins').innerText=xWins;}else{oWins++;document.getElementById('oWins').innerText=oWins;}}
+
+/* HIGHLIGHT WIN */
+function highlightWin(player){
+  const wins=[
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+  for(let combo of wins){
+    if(combo.every(i=>boardState[i]===player)){
+      combo.forEach(i=>boardDiv.children[i].classList.add('glow'));
+      break;
+    }
+  }
+}
+
+/* -------- BOT LOGIC -------- */
+function botMove(){
+  let emptyIndices=boardState.map((v,i)=>v===" "?i: (v===""?i:-1)).filter(i=>i!==-1);
+  let idx=-1;
+  if(botDifficulty==='easy'){
+    idx=emptyIndices[Math.floor(Math.random()*emptyIndices.length)];
+  } else if(botDifficulty==='medium'){
+    // Block player if about to win
+    idx=findBlockingMove("X") ?? emptyIndices[Math.floor(Math.random()*emptyIndices.length)];
+  } else if(botDifficulty==='hard'){
+    idx=findWinningMove("O") ?? findBlockingMove("X") ?? emptyIndices[Math.floor(Math.random()*emptyIndices.length)];
+  }
+  if(idx>=0){boardState[idx]="O"; drawBoard('bot'); if(checkWin()){document.getElementById('status').innerText="Bot Wins! 🤖"; gameOver=true; updateScore("O"); highlightWin("O"); return;}
+    if(boardState.every(c=>c!=="")){document.getElementById('status').innerText="It's a Draw! 🤝"; gameOver=true; draws++; document.getElementById('draws').innerText=draws; return;}
+    currentPlayer="X"; updateStatus();}
+}
+
+/* FIND BLOCK / WIN MOVE */
+function findWinningMove(player){
+  const wins=[
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+  for(let combo of wins){
+    let marks=combo.map(i=>boardState[i]);
+    if(marks.filter(m=>m===player).length===2 && marks.includes("")) return combo[marks.indexOf("")];
+  }
+  return null;
+}
+function findBlockingMove(player){return findWinningMove(player);}
+
+/* CHECK WIN */
+function checkWin(){
+  const wins=[
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+  return wins.some(combo=>combo.every(i=>boardState[i]===currentPlayer));
+}
+</script>
+
+</body>
+</html>
